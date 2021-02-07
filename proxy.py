@@ -5,6 +5,11 @@
 import socket
 from urllib.parse import urlparse
 from client import Client
+import sys
+import os.path
+from os import path
+import csv
+from csv import writer
 
 import codecs
 
@@ -15,6 +20,8 @@ class UDPServer:
         self.server = server
         self.port = port
         self.buffSize = buffSize
+        self.cache = {}
+        self.cacheLocation = "cache.csv"
 
 
         if str.isnumeric(server[0]):
@@ -30,6 +37,42 @@ class UDPServer:
 
 
         self.sock.listen(20)
+        self.initCache()
+        print("done init")
+
+    def initCache(self):
+
+        if(path.exists('cache.txt')):
+            f = open("cache.csv","w")
+            #f.write("key,data\n")
+            f.close()
+            self.loadFromCSV()
+        else:
+            f = open("cache.csv","w+")
+            f.write("key,data\n")
+            f.close()
+        return
+
+    def loadFromCSV(self):
+        reader = csv.DictReader(open(self.cacheLocation, 'rb'))
+        dict_list = []
+        for line in reader:
+            dict_list.append(line)
+        self.cache =  dict_list
+
+        return
+
+
+    def insertToCache(self,key,data):
+        print("called")
+        self.cache[key] = data
+        with open(self.cacheLocation,"a+",newline='') as f:
+            csv_writer = writer(f)
+            csv_writer.writerow([key,data])
+            print("{} {}".format(key,data))
+
+        return
+
 
 
 
@@ -41,35 +84,6 @@ class UDPServer:
         imsi = query_components["imsi"]
         return imsi
 
-    def startListening(self):
-
-            print('about to accept connection')
-            con, addr = self.sock.accept()
-            print('connection accepted')
-
-            try:
-                with con:
-                    while True:
-
-                        data, addr = con.recvfrom(self.buffSize)
-
-
-                        if not data:
-                            break
-
-
-
-                        processData = self.processRequest(data.decode('utf-8').strip().split("\n")[0])
-
-                        print('Sending processed Data')
-                        con.sendall(processData)
-
-            except Exception as e:
-                print(e)
-                print('Error happened and connection was closed')
-                self.sock.close()
-            print('Closed connection')
-            self.sock.close()
 
 
 
@@ -100,19 +114,65 @@ class UDPServer:
     def formatRequest(self,server):
         return "GET / HTTP/1.1\r\nHost:{}\r\n\r\n".format(server)
 
+    def startListening(self):
+
+        print('about to accept connection')
+        con, addr = self.sock.accept()
+        print('connection accepted')
+
+        i = 0
+        with con:
+            while True:
+                print('number of loops: {}'.format(i))
+                data, addr = con.recvfrom(self.buffSize)
+
+                httpRequest = data.decode('utf-8').strip().split("\n")[0]
+
+                if not data:
+                    break
+                else:
+                    if not ('favicon' in httpRequest):
+
+                        if httpRequest in self.cache:
+                            processData = self.cache[httpRequest]
+                        else:
+                            processData = self.processRequest(httpRequest)
+                            self.insertToCache(httpRequest,processData)
+
+                        print('Sending processed Data')
+                        #con.sendto(bytes(processData.encode()), (self.server, self.port))
+                        con.send(bytes(processData.encode()))
+
+                i +=1
+
+
+
+        print('Closed connection')
+        self.sock.close()
+
+
     def processRequest(self,request):
 
-        print("host test: {}".format(self.serachForHost(request)))
+
         serverName = self.serachForHost(request)
         r = self.formatRequest(serverName)
 
+        print('Client server name:{}'.format(request))
         c = Client(serverName,80,self.buffSize)
         c.connect()
 
         print("Sending Message:{}".format(r))
         c.sendMessage(r)
-        print('message send')
+        print('message sent')
+        print('receving data')
         data, addr = c.recvAllFrom()
+        print('Done receiving')
+        c.socket.send(bytes('HTTP/1.0 200 OK\n'.encode()))
+        print('Sent okay request')
+
+
+        c.socket.close()
+
 
         print('Done')
 
@@ -120,9 +180,8 @@ class UDPServer:
 
 
 
-
 print('Started Program')
-udp = UDPServer("127.0.0.1",82,1024)
+udp = UDPServer("127.0.0.1",83,1024)
 print('Start Server')
 udp.startListening()
 

@@ -1,5 +1,7 @@
 from socket import *
 import sys
+from proxy import UDPServer
+
 
 if len(sys.argv) <= 1:
     print('Usage : python proxy.py server_port\n')

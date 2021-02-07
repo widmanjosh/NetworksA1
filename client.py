@@ -44,6 +44,7 @@ class Client:
             print(data.decode())
             lastAddr = addr
 
+
         return totalSiteData,lastAddr
 
     def connect(self):
