@@ -1,13 +1,13 @@
 #sends an http request to a server and prints the response from the server.
 import socket
+import threading
+from time import sleep
 
-
-class Client:
+class Client(threading.Thread):
 
     #create client object to store connection details
     def __init__(self,server,port,bufferSize):
-
-
+        threading.Thread.__init__(self)
         self.port = port
         self.bufferSize = bufferSize
 
@@ -20,11 +20,13 @@ class Client:
 
         #SOCK_DGRAM
         self.socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        self.socket.settimeout(5)
 
         #self.socket.bind((self.server,self.port))
 
     #takes a message for client to send and sends to current server
     def sendMessage(self,msg):
+
         self.socket.sendto(bytes(msg.encode()),(self.server,self.port))
         return
 
@@ -37,13 +39,27 @@ class Client:
         lastAddr = ""
         data = "-1"
         #keep pulling until there is no data returned
+
         while len(data) >0:
 
-            data,addr = self.socket.recvfrom(self.bufferSize)
-            totalSiteData = totalSiteData + data.decode()
-            print(data.decode())
-            lastAddr = addr
+            try:
+                data,addr = self.socket.recvfrom(self.bufferSize)
+                totalSiteData = totalSiteData + data.decode()
+                print(data.decode())
+                lastAddr = addr
 
+                if "302 Moved Temporarily" in data.decode() or "301 Moved Permanently" in data.decode():
+                    self.socket.send(bytes('HTTP/1.0 200 OK\n'.encode()))
+                    break
+
+            except Exception as e:
+                if "timed out" in (str(e)):
+                    break
+                else:
+                    print("new error: {}".format(e))
+
+
+        self.socket.send(bytes('HTTP/1.0 200 OK\n'.encode()))
 
         return totalSiteData,lastAddr
 
